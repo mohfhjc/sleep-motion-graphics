@@ -19,27 +19,43 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: extracted/sleep_motion_remotion/package.json
+
+      - name: Check project ZIP
+        run: |
+          if [ ! -f "sleep_motion_remotion_cinematic.zip" ]; then
+            echo "ERROR: Project ZIP not found in repository root."
+            echo "Upload sleep_motion_remotion_cinematic.zip"
+            exit 1
+          fi
 
       - name: Extract project ZIP
         run: |
-          unzip -o sleep_motion_remotion_project.zip -d extracted
-          find extracted -name package.json -print
+          mkdir -p extracted
+          unzip -o sleep_motion_remotion_cinematic.zip -d extracted
 
       - name: Locate project directory
         run: |
-          PROJECT_DIR=$(find "$GITHUB_WORKSPACE/extracted" -name package.json -printf '%h\n' | head -n 1)
+          PROJECT_DIR="$(find "$GITHUB_WORKSPACE/extracted" \
+            -type f -name package.json \
+            -not -path '*/node_modules/*' \
+            -print -quit | xargs -r dirname)"
+
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: package.json not found in ZIP"
+            echo "ERROR: package.json not found inside ZIP."
             exit 1
           fi
+
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Project directory: $PROJECT_DIR"
 
       - name: Install dependencies
         run: |
           cd "$PROJECT_DIR"
-          npm install
+          npm install --no-audit --no-fund
 
-      - name: Install Chromium
+      - name: Prepare Remotion browser
         run: |
           cd "$PROJECT_DIR"
           npx remotion browser ensure
@@ -49,6 +65,18 @@ jobs:
           cd "$PROJECT_DIR"
           mkdir -p out
           npm run render
+
+      - name: Verify rendered video
+        run: |
+          VIDEO="$PROJECT_DIR/out/sleep-motion.mp4"
+
+          if [ ! -s "$VIDEO" ]; then
+            echo "ERROR: Rendered video not found or empty."
+            find "$PROJECT_DIR/out" -maxdepth 2 -type f
+            exit 1
+          fi
+
+          ls -lh "$VIDEO"
 
       - name: Upload rendered video
         uses: actions/upload-artifact@v4
