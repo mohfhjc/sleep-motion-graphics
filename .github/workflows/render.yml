@@ -1,0 +1,78 @@
+name: Render Sleep Motion Graphics
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Locate project ZIP
+        id: locate
+        shell: bash
+        run: |
+          ZIP_FILE=$(find . -maxdepth 2 -type f -iname "*.zip" | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: No ZIP file found in repository."
+            echo "Upload the complete project ZIP to the repository root."
+            exit 1
+          fi
+
+          echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
+          echo "Found project: $ZIP_FILE"
+
+      - name: Extract project
+        run: |
+          mkdir -p extracted
+          unzip -o "$ZIP_FILE" -d extracted
+
+      - name: Locate package.json
+        shell: bash
+        run: |
+          PROJECT_DIR=$(find "$GITHUB_WORKSPACE/extracted" \
+            -type f -name package.json -printf '%h\n' | head -n 1)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: package.json not found in ZIP."
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: |
+          cd "$PROJECT_DIR"
+          npm install
+
+      - name: Install browser dependencies
+        run: |
+          cd "$PROJECT_DIR"
+          npx remotion browser ensure
+
+      - name: Render video
+        run: |
+          cd "$PROJECT_DIR"
+          mkdir -p out
+          npm run render
+
+      - name: Upload rendered video
+        uses: actions/upload-artifact@v4
+        with:
+          name: sleep-motion-graphics-video
+          path: extracted/**/out/*.mp4
+          if-no-files-found: error
+          retention-days: 7
