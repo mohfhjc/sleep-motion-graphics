@@ -1,0 +1,59 @@
+name: Render Sleep Motion Graphics
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Extract project ZIP
+        run: |
+          unzip -o sleep_motion_remotion_project.zip -d extracted
+          find extracted -name package.json -print
+
+      - name: Locate project directory
+        run: |
+          PROJECT_DIR=$(find "$GITHUB_WORKSPACE/extracted" -name package.json -printf '%h\n' | head -n 1)
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: package.json not found in ZIP"
+            exit 1
+          fi
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: |
+          cd "$PROJECT_DIR"
+          npm install
+
+      - name: Install Chromium
+        run: |
+          cd "$PROJECT_DIR"
+          npx remotion browser ensure
+
+      - name: Render video
+        run: |
+          cd "$PROJECT_DIR"
+          mkdir -p out
+          npm run render
+
+      - name: Upload rendered video
+        uses: actions/upload-artifact@v4
+        with:
+          name: sleep-motion-graphics-video
+          path: extracted/**/out/sleep-motion.mp4
+          if-no-files-found: error
+          retention-days: 7
